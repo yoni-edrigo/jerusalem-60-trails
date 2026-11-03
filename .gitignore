@@ -1,0 +1,5 @@
+src/dl/
+src/trails.json
+src/__pycache__/
+node_modules/
+~$*

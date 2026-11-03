@@ -1,0 +1,379 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="60 סיורים">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="theme-color" content="#f2f2f7">
+<meta name="color-scheme" content="light only">
+<title>60 סיורים בירושלים</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<style>
+/* iOS system palette — light only */
+:root{color-scheme:light only;
+  --bg:#f2f2f7; --cell:#ffffff; --fill:rgba(118,118,128,.12); --sep:rgba(60,60,67,.29);
+  --label:#000; --label2:rgba(60,60,67,.6); --tint:#007aff; --material:rgba(249,249,249,.82);
+  --sheet-shadow:0 -1px 0 rgba(0,0,0,.08),0 -8px 30px rgba(0,0,0,.12);
+}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--bg);color:var(--label);
+  font:17px/1.35 -apple-system,BlinkMacSystemFont,"SF Pro Text","Segoe UI",Arial,sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit}
+#map{position:fixed;inset:0}
+.glass{background:var(--material);-webkit-backdrop-filter:saturate(180%) blur(20px);backdrop-filter:saturate(180%) blur(20px)}
+
+/* ---------- sheet: bottom sheet on phones, floating card on desktop ---------- */
+#sheet{position:fixed;z-index:1000;display:flex;flex-direction:column;box-shadow:var(--sheet-shadow)}
+.grabber{flex:none;height:30px;display:grid;place-items:center;cursor:grab;touch-action:none;margin-bottom:-8px}
+.grabber::before{content:"";width:36px;height:5px;border-radius:3px;background:var(--sep)}
+.scroll{flex:1;overflow:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;touch-action:pan-y;
+  padding:0 16px calc(24px + env(safe-area-inset-bottom));scrollbar-width:none}
+.scroll::-webkit-scrollbar{display:none}
+.drag-zone{touch-action:none}
+.closebtn{position:absolute;top:10px;left:12px;z-index:3;width:30px;height:30px;border-radius:50%;border:0;
+  background:var(--fill);color:var(--label2);font-size:15px;font-weight:700;cursor:pointer;display:none}
+@media (max-width:760px){
+  #sheet{left:0;right:0;bottom:0;border-radius:12px 12px 0 0;
+    height:calc(100vh - env(safe-area-inset-top) - 10px);height:calc(100dvh - env(safe-area-inset-top) - 10px);
+    transform:translateY(var(--y,50%));transition:transform .45s cubic-bezier(.32,.72,0,1)}
+  #sheet.dragging{transition:none}
+  body.sheet-closed #sheet{box-shadow:none}
+  .closebtn{display:block}
+}
+@media (min-width:761px){
+  #sheet{top:16px;bottom:16px;right:16px;width:380px;border-radius:14px}
+  .grabber{display:none}
+}
+
+/* FAB (phones, when the sheet is closed) */
+#fab{position:fixed;z-index:1001;left:50%;bottom:calc(20px + env(safe-area-inset-bottom));
+  transform:translate(-50%,140%);transition:transform .4s cubic-bezier(.32,.72,0,1);
+  border:0;border-radius:28px;height:56px;padding:0 22px;display:none;align-items:center;gap:8px;
+  color:var(--tint);font-weight:600;cursor:pointer;box-shadow:0 4px 18px rgba(0,0,0,.25)}
+#fab svg{width:22px;height:22px}
+@media (max-width:760px){#fab{display:flex} body.sheet-closed #fab{transform:translate(-50%,0)}}
+
+/* full-screen button + iOS tip */
+#fs{position:fixed;z-index:999;top:calc(12px + env(safe-area-inset-top));left:12px;height:40px;min-width:40px;padding:0 10px;
+  border:0;border-radius:10px;display:none;align-items:center;justify-content:center;gap:6px;cursor:pointer;
+  font-size:15px;font-weight:600;color:var(--label);box-shadow:0 2px 10px rgba(0,0,0,.18)}
+#fs svg{width:20px;height:20px}
+#fs.on{color:#fff;background:#ff3b30}
+@media (min-width:761px){#fs{top:auto;bottom:30px}}
+#tip{position:fixed;z-index:1002;top:calc(10px + env(safe-area-inset-top));left:12px;right:12px;border-radius:14px;
+  padding:12px 44px 12px 14px;font-size:15px;box-shadow:0 4px 18px rgba(0,0,0,.2);display:none}
+#tip button{position:absolute;top:8px;right:8px;width:28px;height:28px;border-radius:50%;border:0;background:var(--fill);cursor:pointer}
+
+/* ---------- typography ---------- */
+.large-title{font-size:30px;font-weight:700;letter-spacing:.01em;margin:4px 0 2px}
+.subtitle{color:var(--label2);font-size:15px;margin:0 0 12px}
+.section{font-size:13px;color:var(--label2);text-transform:uppercase;margin:22px 16px 6px}
+.footnote{font-size:13px;color:var(--label2)}
+.search{display:flex;align-items:center;gap:6px;background:var(--fill);border-radius:10px;padding:0 8px;height:36px}
+.search svg{flex:none;opacity:.6}
+.search input{flex:1;border:0;background:none;outline:0;font:inherit;color:var(--label);min-width:0}
+.search input::placeholder{color:var(--label2)}
+.pills{display:flex;gap:8px;overflow-x:auto;margin:12px -16px 0;padding:0 16px 2px;scrollbar-width:none;touch-action:pan-x}
+.pills::-webkit-scrollbar{display:none}
+.pill{flex:none;border:0;border-radius:999px;padding:6px 12px;font-size:15px;background:var(--fill);cursor:pointer;white-space:nowrap}
+.pill i{display:inline-block;width:8px;height:8px;border-radius:50%;margin-left:6px;vertical-align:middle}
+.pill[aria-pressed=true]{background:var(--tint);color:#fff}
+.group{background:var(--cell);border-radius:10px;overflow:hidden;margin:0;padding:0;list-style:none}
+.group li{display:flex;align-items:center;gap:12px;padding:0 16px;min-height:60px;cursor:pointer;position:relative}
+.group li+li::before{content:"";position:absolute;top:0;left:0;right:56px;border-top:.5px solid var(--sep)}
+.group li:active{background:var(--fill)}
+.badge{flex:none;width:30px;height:30px;border-radius:8px;color:#fff;font:600 13px/30px -apple-system,system-ui,sans-serif;text-align:center}
+.cell-text{flex:1;min-width:0;padding:9px 0}
+.cell-text b{display:block;font-weight:400;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cell-text small{display:block;font-size:13px;color:var(--label2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.chev{flex:none;color:var(--sep);font-size:20px;transform:scaleX(-1)}
+.navbar{display:flex;align-items:center;height:44px;margin:0 -8px}
+.navbtn{border:0;background:none;color:var(--tint);font-size:17px;cursor:pointer;padding:8px;display:flex;align-items:center;gap:2px}
+.tag{display:inline-block;font-size:13px;font-weight:600;border-radius:6px;padding:2px 8px;color:#fff}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);background:var(--cell);border-radius:10px;margin-top:14px}
+.stats div{padding:10px 8px;text-align:center}
+.stats div+div{border-right:.5px solid var(--sep)}
+.stats small{display:block;font-size:11px;color:var(--label2);text-transform:uppercase}
+.stats b{font-size:17px;font-weight:600}
+.story{background:var(--cell);border-radius:10px;padding:14px 16px;font-size:17px;line-height:1.5;margin-top:14px}
+.actions{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:14px}
+.actions a{display:flex;flex-direction:column;align-items:center;gap:4px;background:var(--cell);border-radius:10px;
+  padding:10px 4px;color:var(--tint);text-decoration:none;font-size:13px;font-weight:500}
+.actions a[aria-disabled=true]{opacity:.35;pointer-events:none}
+.actions svg{width:24px;height:24px}
+.stoplist li{min-height:44px;cursor:default}
+.stoplist .badge{width:24px;height:24px;border-radius:50%;line-height:22px;font-size:12px;background:#fff!important;color:#000;border:2px solid}
+.prose{background:var(--cell);border-radius:10px;padding:12px 16px;font-size:15px;line-height:1.55;color:var(--label)}
+
+/* map pins: trails = filled rounded squares, stations = white circles with trail-colour ring */
+.pin{width:30px;height:30px;border-radius:9px;border:2.5px solid #fff;box-shadow:0 2px 6px rgba(0,0,0,.35);
+  display:grid;place-items:center;color:#fff;font:600 12px -apple-system,system-ui,sans-serif;
+  transition:transform .25s,opacity .25s,filter .25s}
+.pin.approx{border-style:dashed}
+.has-selection .pin:not(.on){opacity:.55;filter:grayscale(.5);transform:scale(.85)}
+.pin.on{transform:scale(1.3)}
+.stopdot{background:#fff;color:#000;border:3px solid currentColor;border-radius:50%;width:24px;height:24px;
+  font:700 11px -apple-system,system-ui,sans-serif;display:grid;place-items:center;box-shadow:0 1px 4px rgba(0,0,0,.35)}
+.stopdot span{color:#000}
+.leaflet-container{background:var(--bg);font:inherit}
+.leaflet-control-zoom{border:0!important;border-radius:10px!important;overflow:hidden;box-shadow:0 2px 10px rgba(0,0,0,.15)!important}
+.leaflet-control-zoom a{background:var(--material)!important;color:var(--label)!important}
+@media (max-width:760px){.leaflet-control-zoom{display:none}}
+.leaflet-control-layers{border:0!important;border-radius:10px!important;box-shadow:0 2px 10px rgba(0,0,0,.18)!important;
+  background:var(--material)!important;-webkit-backdrop-filter:blur(20px);backdrop-filter:blur(20px);font-size:15px}
+.leaflet-control-layers-toggle{width:40px!important;height:40px!important;background-size:22px!important}
+.leaflet-control-layers-expanded{padding:8px 12px!important}
+.leaflet-control-layers label{padding:4px 0}
+@media (max-width:760px){.leaflet-top.leaflet-left{top:calc(56px + env(safe-area-inset-top))}}
+
+</style>
+</head>
+<body>
+<div id="map"></div>
+<button id="fs" class="glass" aria-label="מסך מלא"></button>
+<div id="tip" class="glass" role="status"><button aria-label="סגירה">✕</button>למסך מלא באייפון: לחצו על <b>שיתוף</b> ⬆︎ ואז <b>הוספה למסך הבית</b></div>
+<section id="sheet" class="glass" aria-label="סיורים">
+  <div class="grabber drag-zone" aria-hidden="true"></div>
+  <button class="closebtn" id="closeSheet" aria-label="סגירת החלונית">✕</button>
+  <div class="scroll" id="scroll"></div>
+</section>
+<button id="fab" class="glass" aria-label="פתיחת רשימת הסיורים">
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M9 6h11M9 12h11M9 18h11"/><circle cx="4.5" cy="6" r="1"/><circle cx="4.5" cy="12" r="1"/><circle cx="4.5" cy="18" r="1"/></svg>
+  <span id="fabLabel">סיורים</span>
+</button>
+<script>
+const TRAILS = /*DATA*/;
+const PALETTE = ["#FF9500","#007AFF","#AF52DE","#34C759","#FF3B30","#A2845E","#30B0C7","#FF2D55","#5856D6","#8E8E93"];
+const topics = [...new Set(TRAILS.map(t => t.topic))];
+const color = t => PALETTE[topics.indexOf(t) % PALETTE.length];
+const esc = s => String(s ?? "").replace(/[&<>"]/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+const $ = id => document.getElementById(id);
+const isPhone = () => matchMedia("(max-width:760px)").matches;
+
+/* ---------- map ---------- */
+const map = L.map("map").setView([31.778, 35.215], 13);
+// ponytail: Esri basemaps — work without a Referer (OSM's tile server returns "Access blocked" for file:// and embedded views)
+const ESRI = "https://server.arcgisonline.com/ArcGIS/rest/services/";
+const attribution = 'Tiles © <a href="https://www.esri.com">Esri</a> — Esri, HERE, Garmin, © OpenStreetMap contributors';
+const esri = (svc, label) => [label, L.tileLayer(ESRI + svc + "/MapServer/tile/{z}/{y}/{x}", {maxZoom: 19, attribution})];
+const BASES = Object.fromEntries([
+  esri("World_Street_Map", "רחובות"),
+  esri("World_Imagery", "לוויין"),
+  esri("World_Topo_Map", "טופוגרפית"),
+  ["OSM (שמות מקומיים)", L.tileLayer("https://{s}.tile.openstreetmap.fr/osmfr/{z}/{x}/{y}.png", {maxZoom: 19, subdomains: "abc",
+    attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> · tiles OSM France'})],
+]);
+let baseName = "רחובות"; try { if (BASES[localStorage.getItem("base")]) baseName = localStorage.getItem("base"); } catch {}
+BASES[baseName].addTo(map);
+L.control.layers(BASES, null, {position: "topleft"}).addTo(map);
+map.on("baselayerchange", e => { try { localStorage.setItem("base", e.name); } catch {} });
+const markers = {};
+TRAILS.forEach(t => {
+  markers[t.n] = L.marker([t.lat, t.lng], {title: t.title, riseOnHover: true, icon: L.divIcon({className: "", iconSize: [30, 30],
+    html: `<div class="pin${t.approx ? " approx" : ""}" id="pin${t.n}" style="background:${color(t.topic)}">${t.n}</div>`})})
+    .on("click", () => openTrail(t.n)).addTo(map);
+});
+const route = L.layerGroup().addTo(map);
+let current = null;   // selected trail number
+function clearSelection() {
+  route.clearLayers();
+  map.getContainer().classList.remove("has-selection");
+  if (current) { $("pin" + current)?.classList.remove("on"); markers[current].setZIndexOffset(0); }
+}
+
+/* ---------- bottom sheet: closed / half / full ---------- */
+const sheet = $("sheet"), scroller = $("scroll");
+const SNAPS = {full: 0, half: 0.5, closed: 1};   // fraction of the sheet pushed below the screen
+let snap = "half";
+function setSnap(s) {
+  snap = s;
+  sheet.style.setProperty("--y", SNAPS[s] * 100 + "%");
+  document.body.classList.toggle("sheet-closed", s === "closed");
+  sheet.setAttribute("aria-hidden", isPhone() && s === "closed");
+}
+const visibleSheetHeight = () => isPhone() ? sheet.offsetHeight * (1 - SNAPS.half) : 0;
+
+let drag = null;   // {y0, f0, h, lastY, lastT, v}
+function dragStart(y) { drag = {y0: y, f0: SNAPS[snap], h: sheet.offsetHeight, lastY: y, lastT: performance.now(), v: 0}; sheet.classList.add("dragging"); }
+function dragMove(y) {
+  const now = performance.now();
+  drag.v = (y - drag.lastY) / Math.max(1, now - drag.lastT); drag.lastY = y; drag.lastT = now;
+  drag.f = Math.min(1, Math.max(0, drag.f0 + (y - drag.y0) / drag.h));
+  sheet.style.setProperty("--y", drag.f * 100 + "%");
+}
+function dragEnd(tapToggle) {
+  if (!drag) return;
+  sheet.classList.remove("dragging");
+  const f = drag.f ?? drag.f0, v = drag.v, order = ["full", "half", "closed"];
+  drag = null;
+  if (tapToggle) return setSnap(snap === "full" ? "half" : "full");
+  if (v > 0.5) return setSnap(order.find(s => SNAPS[s] > f + .02) || "closed");       // flick down: next lower stop
+  if (v < -0.5) return setSnap([...order].reverse().find(s => SNAPS[s] < f - .02) || "full"); // flick up: next higher stop
+  setSnap(order.reduce((a, b) => Math.abs(SNAPS[b] - f) < Math.abs(SNAPS[a] - f) ? b : a));
+}
+// header zones (grabber, navbar, titles): pointer events, works with mouse and touch
+sheet.addEventListener("pointerdown", e => {
+  if (!isPhone() || !e.target.closest(".drag-zone") || e.target.closest("button,input,a")) return;
+  dragStart(e.clientY); sheet.setPointerCapture(e.pointerId);
+});
+sheet.addEventListener("pointermove", e => { if (drag && drag.byPointer !== false) dragMove(e.clientY); });
+sheet.addEventListener("pointerup", e => { if (drag && drag.byPointer !== false) dragEnd(Math.abs(e.clientY - drag.y0) < 4); });
+sheet.addEventListener("pointercancel", () => drag && drag.byPointer !== false && dragEnd(false));
+// list area: pull down at the top (or up while not full) moves the sheet instead of scrolling
+let touch = null;
+scroller.addEventListener("touchstart", e => {
+  touch = isPhone() && !e.target.closest(".drag-zone, .pills") ? {y: e.touches[0].clientY, dragging: false} : null;  // header zones use the pointer path
+}, {passive: true});
+scroller.addEventListener("touchmove", e => {
+  if (!touch) return;
+  const y = e.touches[0].clientY, dy = y - touch.y;
+  if (!touch.dragging) {
+    if ((dy > 6 && scroller.scrollTop <= 0) || (dy < -6 && snap !== "full")) {
+      touch.dragging = true; dragStart(touch.y); drag.byPointer = false;
+    } else return;
+  }
+  e.preventDefault(); dragMove(y);
+}, {passive: false});
+scroller.addEventListener("touchend", () => { if (touch?.dragging) dragEnd(false); touch = null; });
+
+map.on("click", () => { if (current) listView(); else if (isPhone()) setSnap("closed"); });
+$("closeSheet").onclick = () => setSnap("closed");
+$("fab").onclick = () => setSnap("half");
+addEventListener("keydown", e => { if (e.key === "Escape" && isPhone()) setSnap("closed"); });
+setSnap("half");
+
+/* ---------- list view ---------- */
+let activeTopic = null, query = "";
+const searchIcon = `<svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="2"><circle cx="7" cy="7" r="5"/><path d="M11 11l3.5 3.5"/></svg>`;
+function listView() {
+  clearSelection(); current = null; $("fabLabel").textContent = "סיורים";
+  scroller.innerHTML = `
+    <div class="drag-zone">
+      <h1 class="large-title">60 סיורים</h1>
+      <p class="subtitle">ל־60 שנה לאיחוד ירושלים</p>
+    </div>
+    <label class="search">${searchIcon}<input id="q" type="search" enterkeyhint="search" placeholder="חיפוש סיור, אישיות, שכונה" value="${esc(query)}"></label>
+    <div class="pills" id="pills">${topics.map(tp => `<button class="pill" aria-pressed="${tp === activeTopic}" data-t="${esc(tp)}"><i style="background:${color(tp)}"></i>${esc(tp)}</button>`).join("")}</div>
+    <p class="section" id="count"></p>
+    <ul class="group" id="list"></ul>`;
+  $("q").oninput = e => { query = e.target.value.trim(); renderList(); };
+  $("q").onfocus = () => isPhone() && setSnap("full");
+  $("pills").onclick = e => { const b = e.target.closest(".pill"); if (!b) return;
+    activeTopic = activeTopic === b.dataset.t ? null : b.dataset.t;
+    document.querySelectorAll(".pill").forEach(p => p.setAttribute("aria-pressed", p.dataset.t === activeTopic)); renderList(); };
+  $("list").onclick = e => { const li = e.target.closest("li[data-n]"); if (li) openTrail(+li.dataset.n); };
+  renderList();
+}
+function renderList() {
+  const show = TRAILS.filter(t => (!activeTopic || t.topic === activeTopic) &&
+    (!query || (t.name + t.story + t.stops.map(s => s.name).join(" ")).includes(query)));
+  const ids = new Set(show.map(t => t.n));
+  TRAILS.forEach(t => ids.has(t.n) ? markers[t.n].addTo(map) : markers[t.n].remove());
+  $("count").textContent = `${show.length} סיורים`;
+  $("list").innerHTML = show.map(t => `<li data-n="${t.n}" role="button">
+      <span class="badge" style="background:${color(t.topic)}">${t.n}</span>
+      <span class="cell-text"><b>${esc(t.title)}</b><small>${esc(t.topic)}${t.length ? " · " + esc(t.length) : t.walk_km ? " · ≈" + t.walk_km + ' ק"מ' : ""}</small></span>
+      <span class="chev">›</span></li>`).join("") || `<li style="cursor:default"><span class="cell-text"><small>לא נמצאו סיורים</small></span></li>`;
+}
+
+/* ---------- detail view ---------- */
+const ICON = {
+  pdf: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8 13h8M8 17h5"/></svg>`,
+  info: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>`,
+  map: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 4L3 6v14l6-2 6 2 6-2V4l-6 2z"/><path d="M9 4v14M15 6v14"/></svg>`,
+};
+function openTrail(n) {
+  const t = TRAILS.find(x => x.n === n), c = color(t.topic);
+  clearSelection(); current = n;
+  map.getContainer().classList.add("has-selection");
+  $("pin" + n)?.classList.add("on");
+  markers[n].setZIndexOffset(1000);
+  $("fabLabel").textContent = t.title;
+  if (isPhone() && snap !== "full") setSnap("half");
+
+  const pts = t.stops.map(s => [s.lat, s.lng]);
+  const pad = isPhone() ? {paddingTopLeft: [30, 50], paddingBottomRight: [30, visibleSheetHeight() + 20]} : {paddingTopLeft: [40, 40], paddingBottomRight: [430, 40]};
+  if (pts.length > 1) {
+    const legs = t.legs.length ? t.legs : [{pts, dashed: true}];  // no walking path -> dashed "order of stops" line
+    legs.forEach(l => L.polyline(l.pts, {color: c, weight: l.dashed ? 3 : 5, opacity: l.dashed ? .7 : .9, dashArray: l.dashed ? "2 8" : null,
+      lineCap: "round", lineJoin: "round", bubblingMouseEvents: false}).addTo(route));
+    t.stops.forEach((s, i) => L.marker([s.lat, s.lng], {zIndexOffset: 500, icon: L.divIcon({className: "", iconSize: [24, 24],
+      html: `<div class="stopdot" style="color:${c}"><span>${i + 1}</span></div>`})}).bindTooltip(esc(s.name)).addTo(route));
+    map.flyToBounds(legs.flatMap(l => l.pts), {...pad, duration: .6});
+  } else {
+    const p = map.project([t.lat, t.lng], 16).add([0, visibleSheetHeight() / 2]);
+    map.flyTo(map.unproject(p, 16), 16, {duration: .6});
+  }
+
+  const link = (href, icon, label) => `<a href="${esc(href)}" target="_blank" rel="noopener" ${href ? "" : 'aria-disabled="true"'}>${ICON[icon]}${label}</a>`;
+  scroller.innerHTML = `
+    <div class="drag-zone">
+      <div class="navbar"><button class="navbtn" id="back"><span style="font-size:24px;line-height:1">›</span> סיורים</button></div>
+      <span class="tag" style="background:${c}">${esc(t.topic)}</span>
+      <h1 class="large-title" style="font-size:26px;margin-top:6px">${esc(t.title)}</h1>
+      <div class="stats">
+        <div><small>${t.length || !t.walk_km ? "אורך" : "אורך מחושב"}</small><b>${esc(t.length || (t.walk_km ? "≈" + t.walk_km + ' ק"מ' : "—"))}</b></div>
+        <div><small>קושי</small><b>${esc(t.difficulty || "—")}</b></div>
+        <div><small>נגישות</small><b>${t.accessible === "כן" ? "♿︎ כן" : esc(t.accessible || "—")}</b></div>
+      </div>
+    </div>
+    <div class="story">${esc(t.story)}</div>
+    <div class="actions">${link(t.pdf, "pdf", "תיק טיול")}${link(t.catalog, "info", "מינהלת הטיולים")}${link(t.gmap, "map", "מפת מסלול")}</div>
+    ${t.start ? `<p class="section">נקודת התחלה</p><div class="prose">${esc(t.start)}</div>` : ""}
+    ${t.stops.length > 1 ? `<p class="section">תחנות · ${t.stops.length}</p><ul class="group stoplist">${t.stops.map((s, i) =>
+      `<li><span class="badge" style="border-color:${c}">${i + 1}</span><span class="cell-text"><b style="white-space:normal">${esc(s.name)}</b></span></li>`).join("")}</ul>` : ""}
+    ${t.desc ? `<p class="section">תיאור המסלול</p><div class="prose">${esc(t.desc).replace(/\n/g, "<br>")}</div>` : ""}
+    ${t.approx ? `<p class="footnote" style="margin:12px 16px">מיקום הנקודה משוער (נקודת ההתחלה).</p>` : ""}`;
+  scroller.scrollTop = 0;
+  $("back").onclick = listView;
+}
+listView();
+if (isPhone()) map.panBy([0, visibleSheetHeight() / 2], {animate: false}); // keep the pins above the half-open sheet
+
+/* ---------- full screen (Android / desktop) + iPhone home-screen tip ---------- */
+const FS_ICON = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>`;
+const fsBtn = $("fs");
+function syncFs() {
+  const on = !!document.fullscreenElement;
+  fsBtn.classList.toggle("on", on);
+  fsBtn.innerHTML = on ? "✕ יציאה ממסך מלא" : FS_ICON;
+  fsBtn.setAttribute("aria-label", on ? "יציאה ממסך מלא" : "מסך מלא");
+}
+if (document.fullscreenEnabled) {
+  fsBtn.style.display = "flex"; syncFs();
+  fsBtn.onclick = () => document.fullscreenElement ? document.exitFullscreen() : document.documentElement.requestFullscreen().catch(() => {});
+  document.addEventListener("fullscreenchange", syncFs);
+}
+const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent) || (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1);
+const standalone = navigator.standalone || matchMedia("(display-mode: standalone)").matches;
+let tipSeen = false; try { tipSeen = localStorage.getItem("tipSeen") === "1"; } catch {}
+if (isIOS && !standalone && !document.fullscreenEnabled && !tipSeen) {
+  $("tip").style.display = "block";
+  $("tip").querySelector("button").onclick = () => { $("tip").style.display = "none"; try { localStorage.setItem("tipSeen", "1"); } catch {} };
+}
+
+/* ---------- PWA: icon drawn on a canvas, manifest built as a Blob (keeps this a single file) ---------- */
+function icon(size) {
+  const c = document.createElement("canvas"); c.width = c.height = size;
+  const g = c.getContext("2d"), r = size * .22;
+  g.fillStyle = "#007AFF"; g.beginPath(); g.roundRect(0, 0, size, size, r); g.fill();
+  g.fillStyle = "#fff"; g.font = `700 ${size * .46}px -apple-system,Segoe UI,Arial,sans-serif`;
+  g.textAlign = "center"; g.textBaseline = "middle"; g.fillText("60", size / 2, size * .53);
+  return c.toDataURL("image/png");
+}
+try {
+  const i180 = icon(180), here = location.href.split("#")[0];
+  const addLink = (rel, href, extra = {}) => { const l = document.createElement("link"); Object.assign(l, {rel, href}, extra); document.head.append(l); };
+  addLink("apple-touch-icon", i180); addLink("icon", icon(64));
+  const manifest = {name: "60 סיורים בירושלים", short_name: "60 סיורים", lang: "he", dir: "rtl",
+    start_url: here, scope: new URL(".", here).href, display: "standalone", background_color: "#f2f2f7", theme_color: "#007aff",
+    icons: [{src: icon(192), sizes: "192x192", type: "image/png"}, {src: icon(512), sizes: "512x512", type: "image/png", purpose: "any maskable"}]};
+  addLink("manifest", URL.createObjectURL(new Blob([JSON.stringify(manifest)], {type: "application/manifest+json"})));
+} catch {}
+</script>
+</body>
+</html>
